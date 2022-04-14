@@ -24,15 +24,14 @@ uint8_t bis::get_command(){
         if ((CmdBuffer[0] == START_MSG) && (CmdBuffer[CMD_LENGTH-1] == crc)){
             if (CmdBuffer[1] == Handshake){
                 IdleStat = false;
-                digitalWriteFast(DATA_LED,LOW);
                 digitalWriteFast(STATUS_LED,LOW);
-                digitalWriteFast(ALERT_SP,LOW);
+                digitalWriteFast(ALERT_SOUND,LOW);
                 delay(100);
-                digitalWriteFast(ALERT_SP,HIGH);
+                digitalWriteFast(ALERT_SOUND,HIGH);
                 delay(100);
-                digitalWriteFast(ALERT_SP,LOW);
+                digitalWriteFast(ALERT_SOUND,LOW);
                 delay(100);
-                digitalWriteFast(ALERT_SP,HIGH);
+                digitalWriteFast(ALERT_SOUND,HIGH);
                 /*Send reply after handshake message received*/
                 uint8_t msg[MSG_LENGTH];
                 memset(msg,0,MSG_LENGTH);
