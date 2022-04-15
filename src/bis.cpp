@@ -3,17 +3,18 @@
 #include "gpio.h"
 #include <SPI.h>
 #include <MD_AD9833.h>
-MD_AD9833	DDS(FSYNC);  // Hardware SPI
+MD_AD9833	DDS_HIGH(AD9833_HIGH_FSYNC);  // Hardware SPI
+MD_AD9833	DDS_LOW(AD9833_LOW_FSYNC);  // Hardware SPI
 float_tag FloatValue;
 void bis::init(){
-    DDS.begin();
-    set_mode(0);
-    set_frequency(1);
-    DDS.setPhase(DDS.CHAN_0,PhaseSet);
+    DDS_HIGH.begin();
+    set_mode(0,HIGH_DDS);
+    DDS_LOW.begin();
+    set_mode(0,LOW_DDS);
+    set_frequency(0);
     set_current(CurrentSet);
-  
 }
-uint8_t bis::get_command(){
+void bis::get_command(){
     if (Serial.available() > 0){
         CmdBuffer[SerialRxCount] = Serial.read();
         SerialRxCount++;
@@ -24,6 +25,9 @@ uint8_t bis::get_command(){
         if ((CmdBuffer[0] == START_MSG) && (CmdBuffer[CMD_LENGTH-1] == crc)){
             if (CmdBuffer[1] == Handshake){
                 IdleStat = false;
+                IdleStat = false;
+                Connected = true;
+                FirstSetup = true;
                 digitalWriteFast(STATUS_LED,LOW);
                 digitalWriteFast(ALERT_SOUND,LOW);
                 delay(100);
@@ -40,7 +44,6 @@ uint8_t bis::get_command(){
                 memcpy((char*)msg + 2,VersionTag,sizeof(VersionTag));
                 msg[MSG_LENGTH-1] = calculate_sum(msg,MSG_LENGTH-1);
                 send_msg(msg,MSG_LENGTH);
-                return Handshake;
             }
             else if ((CmdBuffer[1] == SetFrequency)){
                 /*Assembly 4 bytes to float (litle endian)*/
@@ -49,45 +52,61 @@ uint8_t bis::get_command(){
                 FloatValue.b[2] = CmdBuffer[4];
                 FloatValue.b[3] = CmdBuffer[5];
                 FrequencySet = FloatValue.fval;
-                return SetFrequency;
+                set_frequency(FrequencySet);
+                SampleCount = 0;
             }
             else if (CmdBuffer[1] == SetWaveForm){
                 /*Waveform data on byte 2*/
                 WaveForm = CmdBuffer[2];
-                return SetWaveForm;
+                if (FrequencySet <= 1000)
+                    set_mode(WaveForm, LOW_DDS);
+                else set_mode(WaveForm, HIGH_DDS);
             }
             else if (CmdBuffer[1] == SelectCurrent){
                 /*Current data on byte 2*/
                 CurrentSet = CmdBuffer[2];
-                return SelectCurrent;
+                set_current(CurrentSet);
             }
             else if (CmdBuffer[1] == SetPhase){
                 /*Phase data on byte 2 and byte 3*/
                 PhaseSet = CmdBuffer[2] + (CmdBuffer[3] << 8);
-                return SetPhase;
+                set_phase(PhaseSet);
             }
             else if (CmdBuffer[1] == DoDisconnect){
-                return DoDisconnect;
-            }
-            else if (CmdBuffer[1] == SetSamplePoint){
-                return SetSamplePoint;
+                IdleStat = true;
+                StartMeasurement = false;
+                Connected = false;
+                FirstSetup = true;
+                digitalWriteFast(ALERT_SOUND,LOW);
+                delay(100);
+                digitalWriteFast(ALERT_SOUND,HIGH);
+                delay(100);
             }
             else if (CmdBuffer[1] == Measurement){
-                return Measurement;
+                StartMeasurement = true;
+                FirstSetup = true;
+                digitalWriteFast(STATUS_LED,HIGH);
             }
             else if (CmdBuffer[1] == DoneMeasurement){
-                return DoneMeasurement;
+                StartMeasurement = false;
+                SendGPDValue = false;
+                digitalWriteFast(STATUS_LED,HIGH);
+                SampleCount = 0;
             }
             else if (CmdBuffer[1] == GetGPDValue){
-                return GetGPDValue;
+                SendGPDValue = true;
+                SampleCount = 0;
             }
             else if (CmdBuffer[1] == StopGetGPD){
-                return StopGetGPD;
+                SendGPDValue = false;
+                SampleCount = 0;
+            }
+            else if (CmdBuffer[1] == GetCCVolt){
+                send_ccvolt();
             }
             memset(CmdBuffer,0,CMD_LENGTH);
         }
     }
-    return IlegalOpcode;
 }
 
 void bis::set_current(byte c){
@@ -122,7 +141,14 @@ void bis::set_current(byte c){
 }
 
 void bis::set_frequency(float f){
-    DDS.setFrequency(MD_AD9833::CHAN_0,f);
+    if (f <= 1000){
+        set_mode(0,HIGH_DDS);
+        DDS_LOW.setFrequency(MD_AD9833::CHAN_0,f);
+    }
+    else{ 
+        set_mode(0,LOW_DDS);
+        DDS_HIGH.setFrequency(MD_AD9833::CHAN_0,f);
+    }
 }
 
 uint8_t bis::calculate_sum(uint8_t *bytes, int len){
@@ -135,25 +161,43 @@ uint8_t bis::calculate_sum(uint8_t *bytes, int len){
   return checksum;
 }
 
-void bis::set_mode(uint8_t mode){
-     switch (mode){
+void bis::set_mode(uint8_t mode, uint8_t DDS){
+    switch (mode){
     case 0:
-        DDS.setMode(DDS.MODE_OFF);
+        if (DDS == LOW_DDS)
+            DDS_LOW.setMode(DDS_LOW.MODE_OFF);
+        else
+            DDS_HIGH.setMode(DDS_HIGH.MODE_OFF);
         break;
      case 1:
-        DDS.setMode(DDS.MODE_SINE);
+        if (DDS == LOW_DDS)
+            DDS_LOW.setMode(DDS_LOW.MODE_SINE);
+        else
+            DDS_HIGH.setMode(DDS_HIGH.MODE_SINE);
         break;
      case 2:
-        DDS.setMode(DDS.MODE_SQUARE1);
+        if (DDS == LOW_DDS)
+            DDS_LOW.setMode(DDS_LOW.MODE_SQUARE1);
+        else
+        DDS_HIGH.setMode(DDS_HIGH.MODE_SQUARE1);
         break;
      case 3:
-        DDS.setMode(DDS.MODE_SQUARE2);
+        if (DDS == LOW_DDS)
+            DDS_LOW.setMode(DDS_LOW.MODE_SQUARE2);
+        else
+            DDS_HIGH.setMode(DDS_HIGH.MODE_SQUARE2);
         break;
      case 4:
-        DDS.setMode(DDS.MODE_TRIANGLE);
+        if (DDS == LOW_DDS)
+            DDS_LOW.setMode(DDS_LOW.MODE_TRIANGLE);
+        else
+            DDS_HIGH.setMode(DDS_HIGH.MODE_TRIANGLE);
         break;
     default:
-        DDS.setMode(DDS.MODE_SINE);
+        if (DDS == LOW_DDS)
+            DDS_LOW.setMode(DDS_LOW.MODE_SINE);
+        else
+            DDS_HIGH.setMode(DDS_HIGH.MODE_SINE);
         break;
     }
 }
@@ -162,7 +206,7 @@ void bis::send_msg(const uint8_t *msg, uint8_t length){
 }
 
 void bis::set_phase(uint16_t p){
-    DDS.setPhase(DDS.CHAN_0,p);
+    DDS_LOW.setPhase(DDS_LOW.CHAN_0,p);
 }
 
 void bis::send_gpd_value(uint16_t ADC_mag, uint16_t ADC_Phase, uint32_t SampleCount){
@@ -180,4 +224,29 @@ void bis::send_gpd_value(uint16_t ADC_mag, uint16_t ADC_Phase, uint32_t SampleCo
     msg[9] = SampleCount & 0xFF; 
     msg[MSG_LENGTH-1] = calculate_sum(msg,MSG_LENGTH-1);
     send_msg(msg,MSG_LENGTH);
+}
+
+void bis::send_ccvolt(){
+    /*Deassembly 4 bytes to float (litle endian)*/
+    uint8_t msg[MSG_LENGTH];
+    memset(msg,0,MSG_LENGTH);
+    msg[0] = START_MSG;
+    msg[1] = GetCCVolt;
+    FloatValue.fval = CCVolt1;
+    msg[2] = FloatValue.b[0];
+    msg[3] = FloatValue.b[1];
+    msg[4] = FloatValue.b[2];
+    msg[5] = FloatValue.b[3];
+    FloatValue.fval = CCVolt2;
+    msg[6] = FloatValue.b[0];
+    msg[7] = FloatValue.b[1];
+    msg[8] = FloatValue.b[2];
+    msg[9] = FloatValue.b[3];
+    msg[MSG_LENGTH-1] = calculate_sum(msg,MSG_LENGTH-1);
+    send_msg(msg,MSG_LENGTH);
+}
+
+void bis::get_ccvolt(){
+    CCVolt1 = (analogRead(PA1) / 4096 * 1.8)/0.6;
+    CCVolt2 = (analogRead(PA2) / 4096 * 1.8)/0.6;
 }

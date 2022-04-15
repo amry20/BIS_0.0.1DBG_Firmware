@@ -4,8 +4,9 @@
 // Pins for SPI comm with the AD9833 IC
 #define DATA  PA_7	///< SPI Data pin number
 #define CLK   PA_5	///< SPI Clock pin number
-#define FSYNC PA_3	///< SPI Load pin number (FSYNC in AD9833 usage)
 
+#define LOW_DDS 0x00
+#define HIGH_DDS 0x01
 
 #define CMD_LENGTH 7
 #define MSG_LENGTH 19
@@ -32,7 +33,8 @@ enum Opcode{
     GPDValue = 0x09,
     DoneMeasurement = 0xA,
     GetGPDValue = 0x0B,
-    StopGetGPD = 0x0C
+    StopGetGPD = 0x0C,
+    GetCCVolt = 0x0D
 };
 enum SamplePoint{
     Sample10 = 0x01,
@@ -57,8 +59,10 @@ class bis {
         bool DoDAQ = false;
         bool SendGPDValue = false;
         bool Connected = false;
+        bool FirstSetup = true;
         int LedCount = 0;
         float FrequencySet = 1000.0; /*Default is 1kHz */
+        float CCVolt1, CCVolt2;
         uint8_t WaveForm =1; /*Defaule is sine wave (1)*/
         uint8_t SampleInterval = 10;
         uint8_t RecvCommand = IlegalOpcode;
@@ -71,15 +75,17 @@ class bis {
         uint16_t SampleNum = 0;
         uint32_t SampleCount = 0;
         void init();
-        uint8_t get_command();
+        void get_command();
         void set_current(byte c);
         uint8_t calculate_sum(uint8_t *bytes, int len);
         void set_frequency(float f);
-        void set_mode(uint8_t mode);
+        void set_mode(uint8_t mode, uint8_t DDS);
         void send_msg(const uint8_t *msg, uint8_t length);
         void set_phase (uint16_t p);
         void send_gpd_value(uint16_t ADC_mag, uint16_t ADC_Phase, uint32_t SampleCount);
+        void get_ccvolt();
     private:
         byte CmdBuffer[CMD_LENGTH];
         byte SerialRxCount = 0;
+        void send_ccvolt();
 };
