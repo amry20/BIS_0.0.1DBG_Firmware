@@ -4,14 +4,11 @@
 #include <SPI.h>
 #include <MD_AD9833.h>
 MD_AD9833	DDS_HIGH(AD9833_HIGH_FSYNC);  // Hardware SPI
-MD_AD9833	DDS_LOW(AD9833_LOW_FSYNC);  // Hardware SPI
 float_tag FloatValue;
 void bis::init(){
     DDS_HIGH.begin();
-    set_mode(0,HIGH_DDS);
-    DDS_LOW.begin();
-    set_mode(0,LOW_DDS);
-    set_frequency(0);
+    set_mode(1);
+    set_frequency(1000);
     set_current(CurrentSet);
 }
 void bis::get_command(){
@@ -42,7 +39,7 @@ void bis::get_command(){
                 msg[0] = START_MSG;
                 msg[1] = Handshake;
                 memcpy((char*)msg + 2,VersionTag,sizeof(VersionTag));
-                msg[MSG_LENGTH-1] = calculate_sum(msg,MSG_LENGTH-1);
+                msg[MSG_LENGTH-1] = calculate_sum(msg,MSG_LENGTH);
                 send_msg(msg,MSG_LENGTH);
             }
             else if ((CmdBuffer[1] == SetFrequency)){
@@ -58,9 +55,7 @@ void bis::get_command(){
             else if (CmdBuffer[1] == SetWaveForm){
                 /*Waveform data on byte 2*/
                 WaveForm = CmdBuffer[2];
-                if (FrequencySet <= 1000)
-                    set_mode(WaveForm, LOW_DDS);
-                else set_mode(WaveForm, HIGH_DDS);
+                set_mode(WaveForm);
             }
             else if (CmdBuffer[1] == SelectCurrent){
                 /*Current data on byte 2*/
@@ -141,14 +136,7 @@ void bis::set_current(byte c){
 }
 
 void bis::set_frequency(float f){
-    if (f <= 1000){
-        set_mode(0,HIGH_DDS);
-        DDS_LOW.setFrequency(MD_AD9833::CHAN_0,f);
-    }
-    else{ 
-        set_mode(0,LOW_DDS);
-        DDS_HIGH.setFrequency(MD_AD9833::CHAN_0,f);
-    }
+    set_frequency(f);
 }
 
 uint8_t bis::calculate_sum(uint8_t *bytes, int len){
@@ -161,43 +149,24 @@ uint8_t bis::calculate_sum(uint8_t *bytes, int len){
   return checksum;
 }
 
-void bis::set_mode(uint8_t mode, uint8_t DDS){
+void bis::set_mode(uint8_t mode){
     switch (mode){
     case 0:
-        if (DDS == LOW_DDS)
-            DDS_LOW.setMode(DDS_LOW.MODE_OFF);
-        else
-            DDS_HIGH.setMode(DDS_HIGH.MODE_OFF);
-        break;
+        DDS_HIGH.setMode(DDS_HIGH.MODE_OFF);
      case 1:
-        if (DDS == LOW_DDS)
-            DDS_LOW.setMode(DDS_LOW.MODE_SINE);
-        else
-            DDS_HIGH.setMode(DDS_HIGH.MODE_SINE);
+        DDS_HIGH.setMode(DDS_HIGH.MODE_SINE);
         break;
      case 2:
-        if (DDS == LOW_DDS)
-            DDS_LOW.setMode(DDS_LOW.MODE_SQUARE1);
-        else
         DDS_HIGH.setMode(DDS_HIGH.MODE_SQUARE1);
         break;
      case 3:
-        if (DDS == LOW_DDS)
-            DDS_LOW.setMode(DDS_LOW.MODE_SQUARE2);
-        else
-            DDS_HIGH.setMode(DDS_HIGH.MODE_SQUARE2);
+        DDS_HIGH.setMode(DDS_HIGH.MODE_SQUARE2);
         break;
      case 4:
-        if (DDS == LOW_DDS)
-            DDS_LOW.setMode(DDS_LOW.MODE_TRIANGLE);
-        else
-            DDS_HIGH.setMode(DDS_HIGH.MODE_TRIANGLE);
+        DDS_HIGH.setMode(DDS_HIGH.MODE_TRIANGLE);
         break;
     default:
-        if (DDS == LOW_DDS)
-            DDS_LOW.setMode(DDS_LOW.MODE_SINE);
-        else
-            DDS_HIGH.setMode(DDS_HIGH.MODE_SINE);
+        DDS_HIGH.setMode(DDS_HIGH.MODE_SINE);
         break;
     }
 }
@@ -206,22 +175,26 @@ void bis::send_msg(const uint8_t *msg, uint8_t length){
 }
 
 void bis::set_phase(uint16_t p){
-    DDS_LOW.setPhase(DDS_LOW.CHAN_0,p);
+    DDS_HIGH.setPhase(DDS_HIGH.CHAN_0,p);
 }
 
-void bis::send_gpd_value(uint16_t ADC_mag, uint16_t ADC_Phase, uint32_t SampleCount){
+void bis::send_gpd_value(){
     uint8_t msg[MSG_LENGTH];
     memset(msg,0,MSG_LENGTH);
     msg[0] = START_MSG;
     msg[1] = GPDValue;
-    msg[2] = (ADC_mag >> 8) & 0xFF;
-    msg[3] = ADC_mag & 0xFF; 
-    msg[4] = (ADC_Phase >> 8) & 0xFF;
-    msg[5] = ADC_Phase & 0xFF; 
-    msg[6] = (SampleCount >> 24) & 0xFF;
-    msg[7] = (SampleCount >> 16) & 0xFF;
-    msg[8] = (SampleCount >> 8) & 0xFF;
-    msg[9] = SampleCount & 0xFF; 
+    msg[2] = (VMAG_ADC1 >> 8) & 0xFF;
+    msg[3] = VMAG_ADC1 & 0xFF; 
+    msg[4] = (VPAHSE_ADC1 >> 8) & 0xFF;
+    msg[5] = VPAHSE_ADC1 & 0xFF; 
+    msg[6] = (VMAG_ADC2 >> 8) & 0xFF;
+    msg[7] = VMAG_ADC2 & 0xFF; 
+    msg[8] = (VPAHSE_ADC2 >> 8) & 0xFF;
+    msg[9] = VPAHSE_ADC2 & 0xFF;
+    msg[10] = (SampleCount >> 24) & 0xFF;
+    msg[11] = (SampleCount >> 16) & 0xFF;
+    msg[12] = (SampleCount >> 8) & 0xFF;
+    msg[13] = SampleCount & 0xFF; 
     msg[MSG_LENGTH-1] = calculate_sum(msg,MSG_LENGTH-1);
     send_msg(msg,MSG_LENGTH);
 }

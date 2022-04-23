@@ -5,18 +5,17 @@
 #include "gpio.h"
 bis BisDAQ;
 void setup() {
-  IWatchdog.begin(5000000UL);
+  IWatchdog.begin(3000000UL);
   IWatchdog.reload();
   Serial.begin(57600);
+  delay(500);
   init_gpio();
   BisDAQ.IdleStat = true;
   BisDAQ.init();
-  analogReadResolution(12);
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  static bool SetFirst = false;
   static __ULong mTick = millis();
   heartbeat();
   BisDAQ.get_command();
@@ -32,9 +31,11 @@ void loop() {
     if (BisDAQ.SendGPDValue){
       if (millis() - mTick >= BisDAQ.SampleInterval){
         mTick = millis();
-        BisDAQ.VMAG_ADC = analogRead(V_MAG);
-        BisDAQ.VPAHSE_ADC =  analogRead(V_PHASE);
-        BisDAQ.send_gpd_value(BisDAQ.VMAG_ADC, BisDAQ.VPAHSE_ADC, BisDAQ.SampleCount);
+        BisDAQ.VMAG_ADC1 = analogRead(V_MAG1);
+        BisDAQ.VPAHSE_ADC1 =  analogRead(V_PHASE1);
+        BisDAQ.VMAG_ADC2 = analogRead(V_MAG2);
+        BisDAQ.VPAHSE_ADC2 =  analogRead(V_PHASE2);
+        BisDAQ.send_gpd_value();
         BisDAQ.SampleCount++;
       }
     }
@@ -64,8 +65,17 @@ void init_gpio(){
   digitalWriteFast(MUX_EN,HIGH);
 
   digitalWriteFast(ALERT_SOUND,LOW);
-  delay(250);
+  delay(100);
   digitalWriteFast(ALERT_SOUND,HIGH);
+  delay(100);
+  digitalWriteFast(ALERT_SOUND,LOW);
+  delay(100);
+  digitalWriteFast(ALERT_SOUND,HIGH);
+  delay(100);
+    digitalWriteFast(ALERT_SOUND,LOW);
+  delay(100);
+  digitalWriteFast(ALERT_SOUND,HIGH);
+  delay(1000);
   analogReadResolution(12);
 }
 

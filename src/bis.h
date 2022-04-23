@@ -17,8 +17,10 @@
 #define C_10u 0x02
 #define C_5u 0x03
 
-#define V_MAG A1
-#define V_PHASE A2
+#define V_MAG1 PC0
+#define V_PHASE1 PC1
+#define V_MAG2 PC2
+#define V_PHASE2 PC3
 
 enum Opcode{
     IlegalOpcode = 0x00,
@@ -70,8 +72,10 @@ class bis {
         uint8_t DAQStatus = Acquiring;
         uint8_t SamplePerSecond = Sample100;
         uint16_t PhaseSet = 0; /*Default phase is 0 degree*/
-        uint16_t VMAG_ADC;
-        uint16_t VPAHSE_ADC;
+        uint16_t VMAG_ADC1;
+        uint16_t VPAHSE_ADC1;
+        uint16_t VMAG_ADC2;
+        uint16_t VPAHSE_ADC2;
         uint16_t SampleNum = 0;
         uint32_t SampleCount = 0;
         void init();
@@ -79,10 +83,10 @@ class bis {
         void set_current(byte c);
         uint8_t calculate_sum(uint8_t *bytes, int len);
         void set_frequency(float f);
-        void set_mode(uint8_t mode, uint8_t DDS);
+        void set_mode(uint8_t mode);
         void send_msg(const uint8_t *msg, uint8_t length);
         void set_phase (uint16_t p);
-        void send_gpd_value(uint16_t ADC_mag, uint16_t ADC_Phase, uint32_t SampleCount);
+        void send_gpd_value();
         void get_ccvolt();
     private:
         byte CmdBuffer[CMD_LENGTH];
